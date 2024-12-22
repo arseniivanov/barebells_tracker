@@ -97,78 +97,67 @@ class BarebellsTracker:
         for product in self._products:
             summary[product.store] = summary.get(product.store, 0) + 1
         return summary
-    
+
     def get_best_deals(self, package_size: Optional[int] = None, limit: int = 5, log: bool = False) -> List[Product]:
         """
-        Get the best deals for given package size.
-        
-        Args:
-            package_size: Filter by package size (None for single products)
-            limit: Number of products to return
-            
-        Returns:
-            List of products sorted by appropriate price metric
+        Get the best deals for given package size, removing duplicate prices from same store.
         """
         products = self._products
 
-        # Log initial count
         if log:
             logging.info(f"Initial product count: {len(products)}")
         
-        # Get initial product set based on package size
+        # Apply initial filters
         if package_size is None:
-            # For singles, filter out anything that looks like a multipack
             products = filtering.filter_singles(products)
-            if log:
-                logging.info(f"After singles filter: {len(products)}")
-            
-            # Additional safety check for price
             products = filtering.filter_by_price_range(products, max_price=100)
-            if log:
-                logging.info(f"After price filter: {len(products)}")
         else:
             products = filtering.filter_by_package_size(products, package_size)
-            if log:
-                logging.info(f"After package size filter: {len(products)}")
         
-        # Filter for available products only
+        # Filter for available products and apply exclusions
         products = filtering.filter_available(products)
-        if log:
-            logging.info(f"After availability filter: {len(products)}")
-
-        # Apply exclusion patterns
         if self.excluded_patterns:
             products = filtering.filter_by_excluded_patterns(products, self.excluded_patterns)
-            if log:
-                logging.info(f"After pattern exclusion: {len(products)}")
-                logging.info(f"Current exclusion patterns: {self.excluded_patterns}")
         
-        # Sort by the appropriate price metric
+        # Sort by appropriate price metric
         if package_size and package_size > 1:
-            # For multipacks, sort by price per unit
             products = sorting.sort_by_per_unit_price(products)
         else:
-            # For singles, sort by direct price
             products = sorting.sort_by_price(products)
         
+        # Remove duplicate prices from same store
+        seen_prices = {}  # Dictionary to track {(store, price): product}
+        unique_products = []
+        
+        for product in products:
+            price_key = (product.store, product.price if package_size is None else product.per_unit_price)
+            if price_key not in seen_prices:
+                seen_prices[price_key] = product
+                unique_products.append(product)
+        
         # Get final results
-        final_products = products[:limit]
+        final_products = unique_products[:limit]
         
         # Debug log the results
-        for product in final_products:
-            logging.info(f"Selected product: {product.name} at {product.price} SEK")
+        if log:
+            for product in final_products:
+                logging.info(f"Selected product: {product.name} at {product.price} SEK")
         
         return final_products
-    
+
     def get_price_range(self, package_size: Optional[int] = None) -> Dict[str, float]:
-        """Get price range statistics for given package size."""
+        """Get price range statistics for given package size, respecting exclusions."""
+        # Start with base filtering
         if package_size is None:
             products = filtering.filter_singles(self._products)
             products = filtering.filter_by_price_range(products, max_price=100)
         else:
             products = filtering.filter_by_package_size(self._products, package_size)
         
+        # Apply availability filter and exclusions
         products = filtering.filter_available(products)
+        if self.excluded_patterns:
+            products = filtering.filter_by_excluded_patterns(products, self.excluded_patterns)
         
         if not products:
             return {
@@ -177,11 +166,16 @@ class BarebellsTracker:
                 'avg_price': None
             }
         
-        prices = [p.price for p in products]
+        # Use the appropriate price metric
+        if package_size and package_size > 1:
+            prices = [p.per_unit_price for p in products if p.per_unit_price is not None]
+        else:
+            prices = [p.price for p in products]
+        
         return {
-            'min_price': min(prices),
-            'max_price': max(prices),
-            'avg_price': sum(prices) / len(prices)
+            'min_price': min(prices) if prices else None,
+            'max_price': max(prices) if prices else None,
+            'avg_price': sum(prices) / len(prices) if prices else None
         }
 
 def create_default_tracker() -> BarebellsTracker:

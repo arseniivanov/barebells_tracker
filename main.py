@@ -15,17 +15,18 @@ def main():
     
     # Print best deals for single bars
     print("\nBest deals for single bars:")
-    for product in tracker.get_best_deals(package_size=None, limit=3):
+    for product in tracker.get_best_deals(package_size=None, limit=7):
         print(f"- {product.name} at {product.price:.2f} SEK from {product.store}")
         print(f"- {product.url}")
     
     # Print best deals for 12-packs
     print("\nBest deals for 12-packs:")
-    for product in tracker.get_best_deals(package_size=12, limit=3):
+    for product in tracker.get_best_deals(package_size=12, limit=7):
         print(f"- {product.name}")
         print(f"  Total price: {product.price:.2f} SEK")
         print(f"  Price per bar: {product.per_unit_price:.2f} SEK")
         print(f"  Store: {product.store}")
+        print(f"- {product.url}")
     
     # Print price ranges
     singles_range = tracker.get_price_range(package_size=None)
